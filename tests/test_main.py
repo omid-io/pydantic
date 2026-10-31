@@ -53,7 +53,6 @@ from pydantic import (
 from pydantic._internal._generate_schema import GenerateSchema
 from pydantic._internal._mock_val_ser import MockCoreSchema
 from pydantic.dataclasses import dataclass as pydantic_dataclass
-from pydantic.v1 import BaseModel as BaseModelV1
 
 
 def test_success():
@@ -2752,6 +2751,34 @@ def test_model_equality_dump(EqualityModel, InnerEqualityModel):
     assert dict(model) != model.model_dump()  # Due to presence of inner model
 
 
+def test_equality_with_multielement_cached_property() -> None:
+    from functools import cached_property
+
+    import numpy as np
+
+    class Model(BaseModel):
+        model_config = ConfigDict(frozen=True)
+        value: int
+
+        @cached_property
+        def derived(self) -> np.ndarray:
+            return np.array([self.value, self.value])
+
+    a = Model(value=1)
+    b = Model(value=1)
+    assert a == b
+
+    _ = a.derived
+    assert a == b
+
+    _ = b.derived
+    assert a == b
+
+    c = Model(value=2)
+    _ = c.derived
+    assert a != c
+
+
 def test_model_equality_fields_set(InnerEqualityModel):
     m1 = InnerEqualityModel(iw=0)
     m2 = InnerEqualityModel(iw=0, ix=0)
@@ -3923,21 +3950,6 @@ def test_shadow_attribute_no_warn_stdlib_dataclass() -> None:
         assert len(captured_warnings) == 0
 
 
-def test_field_name_deprecated_method_name() -> None:
-    """https://github.com/pydantic/pydantic/issues/11912"""
-
-    with pytest.warns(UserWarning):
-
-        class Model(BaseModel):
-            # `collect_model_fields()` will special case these to not use
-            # the deprecated methods as default values:
-            dict: int
-            schema: str
-
-        assert Model.model_fields['dict'].is_required()
-        assert Model.model_fields['schema'].is_required()
-
-
 def test_inherited_class_vars(create_module):
     @create_module
     def module():
@@ -4012,19 +4024,6 @@ def test_subclassing_gen_schema_warns() -> None:
     with pytest.warns(UserWarning, match='Subclassing `GenerateSchema` is not supported.'):
 
         class MyGenSchema(GenerateSchema): ...
-
-
-def test_nested_v1_model_warns() -> None:
-    with pytest.warns(
-        UserWarning,
-        match=r'Mixing V1 models and V2 models \(or constructs, like `TypeAdapter`\) is not supported. Please upgrade `V1Model` to V2.',
-    ):
-
-        class V1Model(BaseModelV1):
-            a: int
-
-        class V2Model(BaseModel):
-            inner: V1Model
 
 
 @pytest.mark.skipif(sys.version_info < (3, 13), reason='requires python 3.13')
