@@ -2751,6 +2751,34 @@ def test_model_equality_dump(EqualityModel, InnerEqualityModel):
     assert dict(model) != model.model_dump()  # Due to presence of inner model
 
 
+def test_equality_with_multielement_cached_property() -> None:
+    from functools import cached_property
+
+    import numpy as np
+
+    class Model(BaseModel):
+        model_config = ConfigDict(frozen=True)
+        value: int
+
+        @cached_property
+        def derived(self) -> np.ndarray:
+            return np.array([self.value, self.value])
+
+    a = Model(value=1)
+    b = Model(value=1)
+    assert a == b
+
+    _ = a.derived
+    assert a == b
+
+    _ = b.derived
+    assert a == b
+
+    c = Model(value=2)
+    _ = c.derived
+    assert a != c
+
+
 def test_model_equality_fields_set(InnerEqualityModel):
     m1 = InnerEqualityModel(iw=0)
     m2 = InnerEqualityModel(iw=0, ix=0)
